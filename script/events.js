@@ -806,6 +806,7 @@ var Events = {
 						leaveBtn = new Button.Button({
 							id: 'leaveBtn',
 							cooldown: Events._LEAVE_COOLDOWN,
+							noTurnCost: true,
 							click: function() {
 								if(scene.nextScene && scene.nextScene != 'end') {
 									Events.loadScene(scene.nextScene);
@@ -1150,6 +1151,7 @@ var Events = {
 				id,
 				text: info.text,
 				cost,
+				noTurnCost: info.noTurnCost === true || info.nextScene === 'end',
 				click: Events.buttonClick,
 				cooldown: info.cooldown
 			}).appendTo(btns);
