@@ -4,6 +4,7 @@
 var Events = {
 
 	_EVENT_TIME_RANGE: [3, 6], // range, in minutes
+	_EVENT_TURN_RANGE: [6, 12],
 	_PANEL_FADE: 200,
 	_FIGHT_SPEED: 100,
 	_EAT_COOLDOWN: 5,
@@ -172,7 +173,7 @@ var Events = {
 	},
 
 	startEnemyAttacks: (delay) => {
-		clearInterval(Events._enemyAttackTimer);
+		Engine.clearInterval(Events._enemyAttackTimer);
 		const scene = Events.activeEvent().scenes[Events.activeScene];
 		Events._enemyAttackTimer = Engine.setInterval(Events.enemyAttack, (delay ?? scene.attackDelay) * 1000);
 	},
@@ -181,19 +182,19 @@ var Events = {
 		fighter.data('status', status);
 		if (status === 'enraged' && fighter.attr('id') === 'enemy') {
 			Events.startEnemyAttacks(0.5);
-			setTimeout(() => {
+			Engine.setTimeout(() => {
 				fighter.data('status', 'none');
 				Events.startEnemyAttacks();
 			}, Events.ENRAGE_DURATION);
 		}
 		if (status === 'meditation') {
 			Events._meditateDmg = 0;
-			setTimeout(() => {
+			Engine.setTimeout(() => {
 				fighter.data('status', 'none');
 			}, Events.MEDITATE_DURATION);
 		}
 		if (status === 'boost') {
-			setTimeout(() => {
+			Engine.setTimeout(() => {
 				fighter.data('status', 'none');
 			}, Events.BOOST_DURATION);
 		}
@@ -583,7 +584,7 @@ var Events = {
 	explode: (enemy, player, dmg) => {
 		Events.clearTimeouts();
 		enemy.addClass('exploding');
-		setTimeout(() => {
+		Engine.setTimeout(() => {
 			enemy.removeClass('exploding');
 			$('.label', enemy).text('*');
 			Events.damage(enemy, player, dmg, 'ranged', () => {
@@ -642,8 +643,8 @@ var Events = {
 				}
 
 				if (venomous && !shielded) {
-					clearInterval(Events._dotTimer);
-					Events._dotTimer = setInterval(() => {
+					Engine.clearInterval(Events._dotTimer);
+					Events._dotTimer = Engine.setInterval(() => {
 						Events.dotDamage(enemy, Math.floor(dmg / 2));
 					}, Events.DOT_TICK);
 				}
@@ -673,7 +674,7 @@ var Events = {
 			if(dmg == 'stun') {
 				msg = _('stunned');
 				enemy.data('stunned', true);
-				setTimeout(() => enemy.data('stunned', false), Events.STUN_DURATION);
+				Engine.setTimeout(() => enemy.data('stunned', false), Events.STUN_DURATION);
 			}
 		}
 
@@ -767,9 +768,9 @@ var Events = {
 	},
 
 	clearTimeouts: () => {
-		clearInterval(Events._enemyAttackTimer);
-		Events._specialTimers.forEach(clearInterval);
-		clearInterval(Events._dotTimer);
+		Engine.clearInterval(Events._enemyAttackTimer);
+		Events._specialTimers.forEach(Engine.clearInterval);
+		Engine.clearInterval(Events._dotTimer);
 	},
 
 	endFight: function() {
@@ -1411,10 +1412,10 @@ var Events = {
 	},
 
 	scheduleNextEvent: function(scale) {
-		var nextEvent = Math.floor(Math.random()*(Events._EVENT_TIME_RANGE[1] - Events._EVENT_TIME_RANGE[0])) + Events._EVENT_TIME_RANGE[0];
+		var nextEvent = Math.floor(Math.random()*(Events._EVENT_TURN_RANGE[1] - Events._EVENT_TURN_RANGE[0] + 1)) + Events._EVENT_TURN_RANGE[0];
 		if(scale > 0) { nextEvent *= scale; }
-		Engine.log('next event scheduled in ' + nextEvent + ' minutes');
-		Events._eventTimeout = Engine.setTimeout(Events.triggerEvent, nextEvent * 60 * 1000);
+		Engine.log('next event scheduled in ' + nextEvent + ' turns');
+		Events._eventTimeout = Engine.setTurnTimeout(Events.triggerEvent, nextEvent);
 	},
 
 	endEvent: function() {
@@ -1473,12 +1474,11 @@ var Events = {
 			delay = $SM.get(state, true);
 		}
 		var time = Engine.setInterval(function(){
-			// update state every half second
-			$SM.set(state, ($SM.get(state) - 0.5), true);
+			$SM.set(state, ($SM.get(state) - 1), true);
 		}, 500);
 		Engine.setTimeout(function(){
 			// outcome realizes. erase countdown
-			window.clearInterval(time);
+			Engine.clearInterval(time);
 			$SM.remove(state);
 			$SM.removeBranch(Events.delayState);
 			action();

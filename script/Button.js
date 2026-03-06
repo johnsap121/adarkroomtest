@@ -1,4 +1,33 @@
 var Button = {
+	_hookRegistered: false,
+
+	_ensureTurnHook: function() {
+		if(Button._hookRegistered || typeof Engine == 'undefined') {
+			return;
+		}
+		Engine.registerTurnHook('button.cooldowns', Button.tickCooldowns, 200);
+		Button._hookRegistered = true;
+	},
+
+	tickCooldowns: function() {
+		$('div.button').each(function() {
+			var btn = $(this);
+			if(!btn.data('onCooldown')) {
+				return;
+			}
+			var current = btn.data('remainingTurns') || 0;
+			current -= 1;
+			btn.data('remainingTurns', current);
+			var total = Math.max(1, btn.data('cooldownTurns') || 1);
+			var left = Math.max(0, current / total);
+			$('div.cooldown', btn).width((left * 100) + "%");
+			$SM.set('cooldown.' + btn.attr('id'), Math.max(0, current), true);
+			if(current <= 0) {
+				Button.clearCooldown(btn, true);
+			}
+		});
+	},
+
 	Button: function(options) {
 		if(typeof options.cooldown == 'number') {
 			this.data_cooldown = options.cooldown;
@@ -14,13 +43,24 @@ var Button = {
 			.text(typeof(options.text) != 'undefined' ? options.text : "button")
 			.click(function() {
 				if(!$(this).hasClass('disabled')) {
+					var noTurnCost = $(this).data('noTurnCost') === true;
+					if(!noTurnCost && !Engine.canActThisTurn) {
+						return;
+					}
+					var result = $(this).data("handler")($(this));
+					if(result === false) {
+						return;
+					}
+					if(!noTurnCost) {
+						Engine.consumeTurnAction();
+					}
 					Button.cooldown($(this));
-					$(this).data("handler")($(this));
 				}
 			})
 			.data("handler",  typeof options.click == 'function' ? options.click : function() { Engine.log("click"); })
 			.data("remaining", 0)
 			.data("cooldown", typeof options.cooldown == 'number' ? options.cooldown : 0)
+			.data("noTurnCost", options.noTurnCost === true)
 			.data('boosted', options.boosted ?? (() => false));
 
 		el.append($("<div>").addClass('cooldown'));
@@ -51,7 +91,7 @@ var Button = {
 
 	setDisabled: function(btn, disabled) {
 		if(btn) {
-			if(!disabled && !btn.data('onCooldown')) {
+			if(!disabled && !btn.data('onCooldown') && !btn.data('turnLocked')) {
 				btn.removeClass('disabled');
 			} else if(disabled) {
 				btn.addClass('disabled');
@@ -68,6 +108,13 @@ var Button = {
 	},
 
 	cooldown: function(btn, option) {
+		if(Engine.STRICT_TURNS) {
+			if(Button.saveCooldown) {
+				$SM.remove('cooldown.'+ btn.attr('id'));
+			}
+			return;
+		}
+		Button._ensureTurnHook();
 		var cd = btn.data("cooldown");
 		if (btn.data('boosted')()) {
 			cd /= 2;
@@ -78,7 +125,7 @@ var Button = {
 				cd = option;
 			}
 			// param "start" takes value from cooldown time if not specified
-			var start, left;
+			var start;
 			switch(option){
 				// a switch will allow for several uses of cooldown function
 				case 'state':
@@ -86,28 +133,20 @@ var Button = {
 						return;
 					}
 					start = Math.min($SM.get(id), cd);
-					left = (start / cd).toFixed(4);
 					break;
 				default:
 					start = cd;
-					left = 1;
 			}
+			start = Math.max(1, Math.ceil(start));
+			var total = Math.max(1, Math.ceil(cd));
+			var left = (start / total).toFixed(4);
 			Button.clearCooldown(btn);
 			if(Button.saveCooldown){
 				$SM.set(id,start);
-				// residual value is measured in seconds
-				// saves program performance
-				btn.data('countdown', Engine.setInterval(function(){
-					$SM.set(id, $SM.get(id, true) - 0.5, true);
-				},500));
 			}
-			var time = start;
-			if (Engine.options.doubleTime){
-				time /= 2;
-			}
-			$('div.cooldown', btn).width(left * 100 +"%").animate({width: '0%'}, time * 1000, 'linear', function() {
-				Button.clearCooldown(btn, true);
-			});
+			btn.data('remainingTurns', start);
+			btn.data('cooldownTurns', total);
+			$('div.cooldown', btn).width(left * 100 +"%");
 			btn.addClass('disabled');
 			btn.data('onCooldown', true);
 		}
@@ -119,13 +158,19 @@ var Button = {
 			$('div.cooldown', btn).stop(true, true);
 		}
 		btn.data('onCooldown', false);
+		btn.removeData('remainingTurns');
+		btn.removeData('cooldownTurns');
 		if(btn.data('countdown')){
-			window.clearInterval(btn.data('countdown'));
+			Engine.clearInterval(btn.data('countdown'));
 			$SM.remove('cooldown.'+ btn.attr('id'));
 			btn.removeData('countdown');
+		} else if(Button.saveCooldown) {
+			$SM.remove('cooldown.'+ btn.attr('id'));
 		}
 		if(!btn.data('disabled')) {
-			btn.removeClass('disabled');
+			if(!btn.data('turnLocked')) {
+				btn.removeClass('disabled');
+			}
 		}
 	}
 };

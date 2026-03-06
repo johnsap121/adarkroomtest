@@ -220,6 +220,23 @@ div#notifications div.notification {
 	margin-bottom: 10px;
 }
 
+div#turnControls {
+	position: absolute;
+	top: 730px;
+	left: 0px;
+	width: 200px;
+}
+
+div#turnControls div.button {
+	width: 180px;
+	margin: 0 0 6px 0;
+}
+
+div#turnCounterLabel {
+	color: #666;
+	text-align: left;
+}
+
 div#notifyGradient {
 	position: absolute;
 	top: 0px;

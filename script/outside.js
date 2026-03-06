@@ -8,6 +8,7 @@ var Outside = {
 	_GATHER_DELAY: 60,
 	_TRAPS_DELAY: 90,
 	_POP_DELAY: [0.5, 3],
+	_POP_TURN_DELAY: [3, 8],
 	_HUT_ROOM: 4,
 	
 	_INCOME: {
@@ -252,9 +253,9 @@ var Outside = {
 	},
 	
 	schedulePopIncrease: function() {
-		var nextIncrease = Math.floor(Math.random()*(Outside._POP_DELAY[1] - Outside._POP_DELAY[0])) + Outside._POP_DELAY[0];
-		Engine.log('next population increase scheduled in ' + nextIncrease + ' minutes');
-		Outside._popTimeout = Engine.setTimeout(Outside.increasePopulation, nextIncrease * 60 * 1000);
+		var nextIncrease = Math.floor(Math.random()*(Outside._POP_TURN_DELAY[1] - Outside._POP_TURN_DELAY[0] + 1)) + Outside._POP_TURN_DELAY[0];
+		Engine.log('next population increase scheduled in ' + nextIncrease + ' turns');
+		Outside._popTimeout = Engine.setTurnTimeout(Outside.increasePopulation, nextIncrease);
 	},
 	
 	updateWorkersView: function() {

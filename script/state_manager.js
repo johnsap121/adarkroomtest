@@ -48,6 +48,35 @@ var StateManager = {
 
 		//subscribe to stateUpdates
 		$.Dispatch('stateUpdate').subscribe($SM.handleStateUpdates);
+		$SM.migrateTurnState();
+	},
+
+	migrateTurnState: function() {
+		$SM.set('game.turn', Math.max(0, Math.floor($SM.get('game.turn', true))), true);
+
+		var cooldown = $SM.get('cooldown') || {};
+		for (var key in cooldown) {
+			if(typeof cooldown[key] == 'number') {
+				cooldown[key] = Math.max(0, Math.ceil(cooldown[key]));
+			}
+		}
+
+		var income = $SM.get('income') || {};
+		for (var source in income) {
+			if(typeof income[source].delay == 'number') {
+				income[source].delay = Math.max(1, Math.ceil(income[source].delay));
+			}
+			if(typeof income[source].timeLeft == 'number') {
+				income[source].timeLeft = Math.max(0, Math.ceil(income[source].timeLeft));
+			}
+		}
+
+		var wait = $SM.get('wait') || {};
+		for (var eventName in wait) {
+			if(typeof wait[eventName] == 'number') {
+				wait[eventName] = Math.max(0, Math.ceil(wait[eventName]));
+			}
+		}
 	},
 
 	//create all parents and then set state

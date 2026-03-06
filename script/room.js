@@ -2,12 +2,12 @@
  * Module that registers the simple room functionality
  */
 var Room = {
-	// times in (minutes * seconds * milliseconds)
-	_FIRE_COOL_DELAY: 5 * 60 * 1000, // time after a stoke before the fire cools
-	_ROOM_WARM_DELAY: 30 * 1000, // time between room temperature updates
-	_BUILDER_STATE_DELAY: 0.5 * 60 * 1000, // time between builder state updates
+	// strict turn pacing
+	_FIRE_COOL_TURNS: 3, // turns after a stoke before the fire cools
+	_ROOM_WARM_TURNS: 1, // turns between room temperature updates
+	_BUILDER_STATE_TURNS: 2, // turns between builder state updates
 	_STOKE_COOLDOWN: 10, // cooldown to stoke the fire
-	_NEED_WOOD_DELAY: 15 * 1000, // from when the stranger shows up, to when you need wood
+	_NEED_WOOD_TURNS: 2, // from when the stranger shows up, to when you need wood
 	buttons: {},
 	Craftables: {
 		'trap': {
@@ -500,10 +500,10 @@ var Room = {
 		Room.pathDiscovery = Boolean($SM.get('stores["compass"]'));
 
 		if (Engine._debug) {
-			this._ROOM_WARM_DELAY = 5000;
-			this._BUILDER_STATE_DELAY = 5000;
+			this._ROOM_WARM_TURNS = 1;
+			this._BUILDER_STATE_TURNS = 1;
 			this._STOKE_COOLDOWN = 0;
-			this._NEED_WOOD_DELAY = 5000;
+			this._NEED_WOOD_TURNS = 1;
 		}
 
 		if (typeof $SM.get('features.location.room') == 'undefined') {
@@ -558,8 +558,8 @@ var Room = {
 		Room.updateIncomeView();
 		Room.updateBuildButtons();
 
-		Room._fireTimer = Engine.setTimeout(Room.coolFire, Room._FIRE_COOL_DELAY);
-		Room._tempTimer = Engine.setTimeout(Room.adjustTemp, Room._ROOM_WARM_DELAY);
+		Room._fireTimer = Engine.setTurnTimeout(Room.coolFire, Room._FIRE_COOL_TURNS);
+		Room._tempTimer = Engine.setTurnTimeout(Room.adjustTemp, Room._ROOM_WARM_TURNS);
 
 		/*
 		 * Builder states:
@@ -570,12 +570,12 @@ var Room = {
 		 * 4 - Helping
 		 */
 		if ($SM.get('game.builder.level') >= 0 && $SM.get('game.builder.level') < 3) {
-			Room._builderTimer = Engine.setTimeout(Room.updateBuilderState, Room._BUILDER_STATE_DELAY);
+			Room._builderTimer = Engine.setTurnTimeout(Room.updateBuilderState, Room._BUILDER_STATE_TURNS);
 		}
 		if ($SM.get('game.builder.level') == 1 && $SM.get('stores.wood', true) < 0) {
-			Engine.setTimeout(Room.unlockForest, Room._NEED_WOOD_DELAY);
+			Engine.setTurnTimeout(Room.unlockForest, Room._NEED_WOOD_TURNS);
 		}
-		Engine.setTimeout($SM.collectIncome, 1000);
+		Engine.setTurnTimeout($SM.collectIncome, 1);
 
 		Notifications.notify(Room, _("the room is {0}", Room.TempEnum.fromInt($SM.get('game.temperature.value')).text));
 		Notifications.notify(Room, _("the fire is {0}", Room.FireEnum.fromInt($SM.get('game.fire.value')).text));
@@ -596,6 +596,7 @@ var Room = {
 				delay: 10,
 				stores: { 'wood': 2 }
 			});
+			Room.updateBuildButtons();
 			Room.updateIncomeView();
 			Notifications.notify(Room, _("the stranger is standing by the fire. she says she can help. says she builds things."));
 		}
@@ -712,10 +713,10 @@ var Room = {
 		if ($SM.get('game.fire.value') > 1 && $SM.get('game.builder.level') < 0) {
 			$SM.set('game.builder.level', 0);
 			Notifications.notify(Room, _("the light from the fire spills from the windows, out into the dark"));
-			Engine.setTimeout(Room.updateBuilderState, Room._BUILDER_STATE_DELAY);
+			Engine.setTurnTimeout(Room.updateBuilderState, Room._BUILDER_STATE_TURNS);
 		}
-		window.clearTimeout(Room._fireTimer);
-		Room._fireTimer = Engine.setTimeout(Room.coolFire, Room._FIRE_COOL_DELAY);
+		Engine.clearTimeout(Room._fireTimer);
+		Room._fireTimer = Engine.setTurnTimeout(Room.coolFire, Room._FIRE_COOL_TURNS);
 		Room.updateButton();
 		Room.setTitle();
 
@@ -735,7 +736,7 @@ var Room = {
 		}
 		if ($SM.get('game.fire.value') > 0) {
 			$SM.set('game.fire', Room.FireEnum.fromInt($SM.get('game.fire.value') - 1));
-			Room._fireTimer = Engine.setTimeout(Room.coolFire, Room._FIRE_COOL_DELAY);
+			Room._fireTimer = Engine.setTurnTimeout(Room.coolFire, Room._FIRE_COOL_TURNS);
 			Room.onFireChange();
 		}
 	},
@@ -753,7 +754,7 @@ var Room = {
 		if ($SM.get('game.temperature.value') != old) {
 			Room.changed = true;
 		}
-		Room._tempTimer = Engine.setTimeout(Room.adjustTemp, Room._ROOM_WARM_DELAY);
+		Room._tempTimer = Engine.setTurnTimeout(Room.adjustTemp, Room._ROOM_WARM_TURNS);
 	},
 
 	unlockForest: function () {
@@ -769,7 +770,7 @@ var Room = {
 		if (lBuilder === 0) {
 			Notifications.notify(Room, _("a ragged stranger stumbles through the door and collapses in the corner"));
 			lBuilder = $SM.setget('game.builder.level', 1);
-			Engine.setTimeout(Room.unlockForest, Room._NEED_WOOD_DELAY);
+			Engine.setTurnTimeout(Room.unlockForest, Room._NEED_WOOD_TURNS);
 		}
 		else if (lBuilder < 3 && $SM.get('game.temperature.value') >= Room.TempEnum.Warm.value) {
 			var msg = "";
@@ -787,7 +788,7 @@ var Room = {
 			}
 		}
 		if (lBuilder < 3) {
-			Engine.setTimeout(Room.updateBuilderState, Room._BUILDER_STATE_DELAY);
+			Engine.setTurnTimeout(Room.updateBuilderState, Room._BUILDER_STATE_TURNS);
 		}
 		Engine.saveGame();
 	},
@@ -1230,7 +1231,10 @@ var Room = {
 		} else if (e.category == 'income') {
 			Room.updateStoresView();
 			Room.updateIncomeView();
+			Room.updateBuildButtons();
 		} else if (e.stateName.indexOf('game.buildings') === 0) {
+			Room.updateBuildButtons();
+		} else if (e.stateName.indexOf('game.builder') === 0) {
 			Room.updateBuildButtons();
 		}
 	},

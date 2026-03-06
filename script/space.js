@@ -66,8 +66,8 @@ var Space = {
 			left: '350px'
 		});
 		Space.startAscent();
-		Space._shipTimer = setInterval(Space.moveShip, 33);
-		Space._volumeTimer = setInterval(Space.lowerVolume, 1000);
+		Space._shipTimer = Engine.setInterval(Space.moveShip, 33);
+		Space._volumeTimer = Engine.setInterval(Space.lowerVolume, 1000);
 		AudioEngine.playBackgroundMusic(AudioLibrary.MUSIC_SPACE);
 	},
 	
@@ -212,12 +212,6 @@ var Space = {
 			dy = dy / Math.sqrt(2);
 		}
 		
-		if(Space.lastMove != null) {
-			var dt = Date.now() - Space.lastMove;
-			dx *= dt / 33;
-			dy *= dt / 33;
-		}
-		
 		x = x + dx;
 		y = y + dy;
 		if(x < 10) {
@@ -238,8 +232,6 @@ var Space = {
 			left: x + 'px',
 			top: y + 'px'
 		});
-
-		Space.lastMove = Date.now();
 	},
 	
 	startAscent: function() {
@@ -268,13 +260,13 @@ var Space = {
 			complete: Space.endGame
 		});
 		Space.drawStars();
-		Space._timer = setInterval(function() {
+		Space._timer = Engine.setInterval(function() {
 			Space.altitude += 1;
 			if(Space.altitude % 10 === 0) {
 				Space.setTitle();
 			}
 			if(Space.altitude > 60) {
-				clearInterval(Space._timer);
+				Engine.clearInterval(Space._timer);
 			}
 		}, 1000);
 		
@@ -340,10 +332,10 @@ var Space = {
 		if(Space.done) return;
 		Engine.keyLock = true;
 		Space.done = true;
-		clearInterval(Space._timer);
-		clearInterval(Space._shipTimer);
-		clearInterval(Space._volumeTimer);
-		clearTimeout(Space._panelTimeout);
+		Engine.clearInterval(Space._timer);
+		Engine.clearInterval(Space._shipTimer);
+		Engine.clearInterval(Space._volumeTimer);
+		Engine.clearTimeout(Space._panelTimeout);
 		var body_color;
 		if (Engine.isLightsOff())
 			body_color = '#272823';
@@ -383,15 +375,15 @@ var Space = {
 		if(Space.done) return;
 		Engine.event('progress', 'win');
 		Space.done = true;
-		clearInterval(Space._timer);
-		clearInterval(Space._shipTimer);
-		clearInterval(Space._volumeTimer);
-		clearTimeout(Engine._saveTimer);
-		clearTimeout(Outside._popTimeout);
-		clearTimeout(Engine._incomeTimeout);
-		clearTimeout(Events._eventTimeout);
-		clearTimeout(Room._fireTimer);
-		clearTimeout(Room._tempTimer);
+		Engine.clearInterval(Space._timer);
+		Engine.clearInterval(Space._shipTimer);
+		Engine.clearInterval(Space._volumeTimer);
+		Engine.clearTimeout(Engine._saveTimer);
+		Engine.clearTimeout(Outside._popTimeout);
+		Engine.clearTimeout(Engine._incomeTimeout);
+		Engine.clearTimeout(Events._eventTimeout);
+		Engine.clearTimeout(Room._fireTimer);
+		Engine.clearTimeout(Room._tempTimer);
 		for(var j in Room.Craftables) {
 			Room.Craftables[j].button = null;
 		}
@@ -463,7 +455,7 @@ var Space = {
 				.addClass('outroContainer')
 				.appendTo('body');
 
-			setTimeout(() => {
+			Engine.setTimeout(() => {
 				$('<div>')
 					.addClass('outro')
 					.html('the beacon pulses gently as the ship glides through space.<br>coordinates are locked. nothing to do but wait.')
@@ -471,7 +463,7 @@ var Space = {
 					.animate({ opacity: 1}, 500);
 			}, 2000);
 
-			setTimeout(() => {
+			Engine.setTimeout(() => {
 				$('<div>')
 					.addClass('outro')
 					.html('the beacon glows a solid blue, and then goes dim. the ship slows.<br>gradually, the vast wanderer homefleet comes into view.<br>massive worldships drift unnaturally through clouds of debris, scarred and dead.')
@@ -479,7 +471,7 @@ var Space = {
 					.animate({ opacity: 1}, 500);
 			}, 7000);
 
-			setTimeout(() => {
+			Engine.setTimeout(() => {
 				$('<div>')
 					.addClass('outro')
 					.text('the air is running out.')
@@ -487,7 +479,7 @@ var Space = {
 					.animate({ opacity: 1}, 500);
 			}, 14000);
 
-			setTimeout(() => {
+			Engine.setTimeout(() => {
 				$('<div>')
 					.addClass('outro')
 					.text('the capsule is cold.')
@@ -495,7 +487,7 @@ var Space = {
 					.animate({ opacity: 1}, 500);
 			}, 17000);
 
-			setTimeout(() => {
+			Engine.setTimeout(() => {
 				Button.Button({
 					id: 'wait-btn',
 					text: _('wait'),
@@ -503,7 +495,7 @@ var Space = {
 						btn.addClass('disabled');
 						c.animate({ opacity: 0 }, 5000, 'linear', () => {
 							c.remove();
-							setTimeout(resolve, 3000);
+							Engine.setTimeout(resolve, 3000);
 						})
 					}
 				}).animate({ opacity: 1 }, 500).appendTo(c);

@@ -6,6 +6,13 @@
     MAX_STORE: 99999999999999,
     SAVE_DISPLAY: 30 * 1000,
     GAME_OVER: false,
+    STRICT_TURNS: true,
+    TURN_MS: 1000,
+    turnCount: 0,
+    _turnHooks: [],
+    _turnTimers: {},
+    _nextTurnTimerId: 1,
+    canActThisTurn: true,
 
     //object event types
     topics: {},
@@ -161,6 +168,11 @@
         .appendTo(menu);
 
       $('<span>')
+        .addClass('turnCounter menuBtn')
+        .text('turn 0')
+        .appendTo(menu);
+
+      $('<span>')
         .addClass('hyper menuBtn')
         .text(_('hyper.'))
         .click(Engine.confirmHyperMode)
@@ -217,6 +229,24 @@
       $SM.init();
       AudioEngine.init();
       Notifications.init();
+      if($('#turnControls').length === 0) {
+        $('<div>').attr('id', 'turnControls').appendTo('#wrapper');
+      }
+      if($('#endTurnButton').length === 0) {
+        new Button.Button({
+          id: 'endTurnButton',
+          text: 'End Turn',
+          click: function() { Engine.advanceTurn(1); },
+          width: '180px',
+          noTurnCost: true
+        }).appendTo('#turnControls');
+      }
+      if($('#turnCounterLabel').length === 0) {
+        $('<div>')
+          .attr('id', 'turnCounterLabel')
+          .text('turn 0')
+          .appendTo('#turnControls');
+      }
       Events.init();
       Room.init();
 
@@ -246,11 +276,14 @@
       if(!AudioEngine.isAudioContextRunning()){
         document.addEventListener('click', Engine.resumeAudioContext, true);
       }
+      Engine.turnCount = Math.max(0, Math.floor($SM.get('game.turn', true)));
+      Engine.updateTurnCounter();
+      Engine.resetTurnAction();
       
       Engine.saveLanguage();
       Engine.travelTo(Room);
 
-      setTimeout(notifyAboutSound, 3000);
+      Engine.setTimeout(notifyAboutSound, 3000);
 
     },
     resumeAudioContext: function () {
@@ -272,7 +305,7 @@
     saveGame: function() {
       if(typeof Storage != 'undefined' && localStorage) {
         if(Engine._saveTimer != null) {
-          clearTimeout(Engine._saveTimer);
+          Engine.clearTimeout(Engine._saveTimer);
         }
         if(typeof Engine._lastNotify == 'undefined' || Date.now() - Engine._lastNotify > Engine.SAVE_DISPLAY){
           $('#saveNotify').css('opacity', 1).animate({opacity: 0}, 1000, 'linear');
@@ -680,8 +713,142 @@
     },
 
     getIncomeMsg: function(num, delay) {
-      return _("{0} per {1}s", (num > 0 ? "+" : "") + num, delay);
+      return _("{0} per {1} turns", (num > 0 ? "+" : "") + num, delay);
       //return (num > 0 ? "+" : "") + num + " per " + delay + "s";
+    },
+
+    msToTurns: function(ms, skipDouble) {
+      var intervalMs = ms;
+      if(Engine.options.doubleTime && !skipDouble){
+        intervalMs /= 2;
+      }
+      if(typeof intervalMs != 'number' || intervalMs <= 0) {
+        return 1;
+      }
+      return Math.max(1, Math.ceil(intervalMs / Engine.TURN_MS));
+    },
+
+    registerTurnHook: function(name, callback, order) {
+      Engine.unregisterTurnHook(name);
+      Engine._turnHooks.push({
+        name: name,
+        callback: callback,
+        order: typeof order == 'number' ? order : 0
+      });
+      Engine._turnHooks.sort(function(a, b) {
+        if(a.order === b.order) {
+          return a.name < b.name ? -1 : 1;
+        }
+        return a.order - b.order;
+      });
+    },
+
+    unregisterTurnHook: function(name) {
+      Engine._turnHooks = Engine._turnHooks.filter(function(h) {
+        return h.name !== name;
+      });
+    },
+
+    updateTurnCounter: function() {
+      $('.turnCounter').text('turn ' + Engine.turnCount);
+      $('#turnCounterLabel').text('turn ' + Engine.turnCount);
+    },
+
+    consumeTurnAction: function() {
+      if(!Engine.canActThisTurn) {
+        return false;
+      }
+      Engine.canActThisTurn = false;
+      Engine.updateActionButtons();
+      return true;
+    },
+
+    resetTurnAction: function() {
+      Engine.canActThisTurn = true;
+      $('div.button').each(function() {
+        var btn = $(this);
+        if(btn.data('onCooldown')) {
+          Button.clearCooldown(btn, true);
+        }
+      });
+      Engine.updateActionButtons();
+    },
+
+    updateActionButtons: function() {
+      $('div.button').each(function() {
+        var btn = $(this);
+        if(btn.data('noTurnCost') === true) {
+          btn.data('turnLocked', false);
+          btn.removeClass('disabled');
+          return;
+        }
+        if(!Engine.canActThisTurn) {
+          btn.addClass('disabled');
+          btn.data('turnLocked', true);
+        } else {
+          btn.data('turnLocked', false);
+          if(!btn.data('disabled') && !btn.data('onCooldown')) {
+            btn.removeClass('disabled');
+          }
+        }
+      });
+    },
+
+    _runDueTurnTimers: function() {
+      var due = [];
+      for(var timerId in Engine._turnTimers) {
+        var timer = Engine._turnTimers[timerId];
+        if(timer && timer.nextTurn <= Engine.turnCount) {
+          due.push(timer);
+        }
+      }
+      due.sort(function(a, b) { return a.id - b.id; });
+      for(var i = 0; i < due.length; i++) {
+        var active = Engine._turnTimers[due[i].id];
+        if(!active) {
+          continue;
+        }
+        active.callback();
+        if(!Engine._turnTimers[active.id]) {
+          continue;
+        }
+        if(active.intervalTurns) {
+          active.nextTurn = Engine.turnCount + active.intervalTurns;
+        } else {
+          delete Engine._turnTimers[active.id];
+        }
+      }
+    },
+
+    advanceTurn: function(n) {
+      var turns = typeof n == 'number' ? Math.max(1, Math.floor(n)) : 1;
+      for(var i = 0; i < turns; i++) {
+        Engine.turnCount += 1;
+        $SM.set('game.turn', Engine.turnCount, true);
+        for(var h = 0; h < Engine._turnHooks.length; h++) {
+          try {
+            Engine._turnHooks[h].callback(Engine.turnCount);
+          } catch(err) {
+            Engine.log(err);
+          }
+        }
+        try {
+          Engine._runDueTurnTimers();
+        } catch(err) {
+          Engine.log(err);
+        }
+      }
+      Engine.resetTurnAction();
+      Engine.updateTurnCounter();
+      Engine.saveGame();
+    },
+
+    isTypingElement: function(target) {
+      if(!target || !target.tagName) {
+        return false;
+      }
+      var tag = target.tagName.toLowerCase();
+      return tag == 'input' || tag == 'textarea' || target.isContentEditable;
     },
 
     keyLock: false,
@@ -701,6 +868,11 @@
 
     keyUp: function(e) {
       Engine.pressed = false;
+      if (e.which === 32 && !Engine.isTypingElement(e.target)) {
+        e.preventDefault();
+        Engine.advanceTurn(1);
+        return false;
+      }
       if(Engine.activeModule.keyUp) {
         Engine.activeModule.keyUp(e);
       } else {
@@ -832,24 +1004,57 @@
     },
 
     setInterval: function(callback, interval, skipDouble){
-      if( Engine.options.doubleTime && !skipDouble ){
-        Engine.log('Double time, cutting interval in half');
-        interval /= 2;
-      }
+      var id = Engine._nextTurnTimerId++;
+      Engine._turnTimers[id] = {
+        id: id,
+        callback: callback,
+        nextTurn: Engine.turnCount + Engine.msToTurns(interval, skipDouble),
+        intervalTurns: Engine.msToTurns(interval, skipDouble)
+      };
+      return id;
+    },
 
-      return setInterval(callback, interval);
-
+    setTurnInterval: function(callback, turns){
+      var id = Engine._nextTurnTimerId++;
+      var intervalTurns = Math.max(1, Math.ceil(turns));
+      Engine._turnTimers[id] = {
+        id: id,
+        callback: callback,
+        nextTurn: Engine.turnCount + intervalTurns,
+        intervalTurns: intervalTurns
+      };
+      return id;
     },
 
     setTimeout: function(callback, timeout, skipDouble){
+      var id = Engine._nextTurnTimerId++;
+      Engine._turnTimers[id] = {
+        id: id,
+        callback: callback,
+        nextTurn: Engine.turnCount + Engine.msToTurns(timeout, skipDouble),
+        intervalTurns: null
+      };
+      return id;
+    },
 
-      if( Engine.options.doubleTime && !skipDouble ){
-        Engine.log('Double time, cutting timeout in half');
-        timeout /= 2;
-      }
+    setTurnTimeout: function(callback, turns){
+      var id = Engine._nextTurnTimerId++;
+      var delayTurns = Math.max(1, Math.ceil(turns));
+      Engine._turnTimers[id] = {
+        id: id,
+        callback: callback,
+        nextTurn: Engine.turnCount + delayTurns,
+        intervalTurns: null
+      };
+      return id;
+    },
 
-      return setTimeout(callback, timeout);
+    clearInterval: function(id){
+      delete Engine._turnTimers[id];
+    },
 
+    clearTimeout: function(id){
+      delete Engine._turnTimers[id];
     }
   };
 
